@@ -1,5 +1,121 @@
 let currentEditItem = null;
 
+const saveTasksToStorage = () => {
+  const items = document.querySelectorAll('#myUL li');
+  const tasks = [];
+
+  items.forEach((item) => {
+    if (item.style.display !== 'none') {
+      const contentNodes = Array.from(item.childNodes).filter(
+        (node) => node.nodeType === Node.TEXT_NODE
+      );
+
+      let itemContent = '';
+      for (const node of contentNodes) {
+        itemContent += node.textContent;
+      }
+      itemContent = itemContent.trim();
+
+      const [itemName, itemQuantity] = itemContent.split(' - ');
+
+      tasks.push({
+        item: itemName,
+        quantity: itemQuantity,
+        checked: item.classList.contains('checked'),
+      });
+    }
+  });
+
+  localStorage.setItem('todoTasks', JSON.stringify(tasks));
+
+  console.log('Tasks saved to localStorage successfully!');
+};
+
+const loadTasksFromStorage = () => {
+  try {
+    const tasksJson = localStorage.getItem('todoTasks');
+    if (tasksJson) {
+      return JSON.parse(tasksJson);
+    }
+
+    return fetch('data.json')
+      .then((response) => response.json())
+      .then((data) => {
+        localStorage.setItem('todoTasks', JSON.stringify(data));
+        return data;
+      })
+      .catch((err) => {
+        console.log('Error loading tasks from localStorage and fetch:', err);
+        return [];
+      });
+  } catch (err) {
+    console.log('Error:', err);
+    return [];
+  }
+};
+
+const renderTasksFromStorage = async () => {
+  const ul = document.getElementById('myUL');
+  ul.innerHTML = '';
+  const tasks = await loadTasksFromStorage();
+
+  if (Array.isArray(tasks) && tasks.length > 0) {
+    tasks.forEach((task) => {
+      const li = document.createElement('li');
+      li.setAttribute('draggable', 'true');
+      li.classList.add('draggable');
+
+      if (task.checked) {
+        li.classList.add('checked');
+      }
+
+      const numberSpan = document.createElement('span');
+      numberSpan.className = 'item-number';
+      li.appendChild(numberSpan);
+
+      const t = document.createTextNode(`${task.item} - ${task.quantity}`);
+      li.appendChild(t);
+      ul.appendChild(li);
+
+      li.addEventListener('click', function (e) {
+        if (e.target === this || e.target.classList.contains('item-number')) {
+          this.classList.toggle('checked');
+          saveTasksToStorage();
+        }
+      });
+
+      li.addEventListener('dragstart', dragstartHandler);
+
+      const span = document.createElement('SPAN');
+      const txt = document.createTextNode('\u00D7');
+      span.className = 'close';
+      span.appendChild(txt);
+      li.appendChild(span);
+
+      span.onclick = function (e) {
+        e.stopPropagation();
+        const div = this.parentElement;
+        div.style.display = 'none';
+        updateItemNumbers();
+        saveTasksToStorage();
+      };
+
+      const editSpan = document.createElement('SPAN');
+      const editTxt = document.createTextNode('✎');
+      editSpan.className = 'edit';
+      editSpan.appendChild(editTxt);
+      li.appendChild(editSpan);
+
+      editSpan.onclick = function (e) {
+        e.stopPropagation();
+        openEditModal(li);
+      };
+    });
+
+    updateItemNumbers();
+  }
+};
+
 const updateItemNumbers = () => {
   const items = document.querySelectorAll(
     '#myUL li:not([style*="display: none"])'
@@ -44,6 +160,7 @@ const addItem = () => {
   li.addEventListener('click', function (e) {
     if (e.target === this || e.target.classList.contains('item-number')) {
       this.classList.toggle('checked');
+      saveTasksToStorage();
     }
   });
 
@@ -60,6 +177,7 @@ const addItem = () => {
     const div = this.parentElement;
     div.style.display = 'none';
     updateItemNumbers();
+    saveTasksToStorage();
   };
 
   const editSpan = document.createElement('SPAN');
@@ -74,6 +192,7 @@ const addItem = () => {
   };
 
   updateItemNumbers();
+  saveTasksToStorage();
 };
 
 const openEditModal = (li) => {
@@ -147,6 +266,7 @@ const saveEditedItemModal = () => {
     const div = this.parentElement;
     div.style.display = 'none';
     updateItemNumbers();
+    saveTasksToStorage(); // Zapisz po usunięciu
   };
 
   const editSpan = document.createElement('SPAN');
@@ -163,6 +283,7 @@ const saveEditedItemModal = () => {
   currentEditItem.addEventListener('click', function (e) {
     if (e.target === this || e.target.classList.contains('item-number')) {
       this.classList.toggle('checked');
+      saveTasksToStorage();
     }
   });
 
@@ -171,6 +292,7 @@ const saveEditedItemModal = () => {
   }
 
   closeEditModal();
+  saveTasksToStorage();
 };
 
 const deleteAllItems = () => {
@@ -184,6 +306,7 @@ const deleteAllItems = () => {
     items.forEach((item) => {
       item.remove();
     });
+    saveTasksToStorage();
   }
 };
 
@@ -303,11 +426,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document
     .getElementById('modalSearchInput')
-    .addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') {
+    .addEventListener('input', function () {
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = setTimeout(() => {
         performModalSearch();
-      }
+      }, 300);
     });
+
+  renderTasksFromStorage();
 });
 
 //////////////////////////
@@ -358,6 +484,7 @@ const dropHandler = (e) => {
     });
 
     updateItemNumbers();
+    saveTasksToStorage(); // Zapisz po zmianie kolejności
   }
 
   dragSrcElement.classList.remove('dragging');
